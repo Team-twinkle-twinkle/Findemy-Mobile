@@ -1,4 +1,5 @@
 import 'package:findemy_mobile/presentation/login_page/view/login_page.dart';
+import 'package:findemy_mobile/presentation/main_app.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 
@@ -9,8 +10,7 @@ class OnBoardingPage extends StatefulWidget {
   State<OnBoardingPage> createState() => _OnBoardingPageState();
 }
 
-class _OnBoardingPageState extends State<OnBoardingPage>
-    with SingleTickerProviderStateMixin {
+class _OnBoardingPageState extends State<OnBoardingPage> with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _widthFactor;
 
@@ -22,7 +22,7 @@ class _OnBoardingPageState extends State<OnBoardingPage>
       vsync: this,
     );
 
-    _widthFactor = Tween<double>(begin: 0.0, end: 1.0).animate(
+    _widthFactor = Tween<double>(begin: 0, end: 1).animate(
       CurvedAnimation(parent: _controller, curve: Curves.easeOut),
     );
     _controller.forward();
@@ -33,7 +33,7 @@ class _OnBoardingPageState extends State<OnBoardingPage>
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(
-                builder: (context) => LoginPage(),
+                builder: (context) => const LoginPage(),
               ),
             );
           }

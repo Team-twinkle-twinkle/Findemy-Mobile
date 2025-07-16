@@ -5,42 +5,10 @@ import 'package:flutter_svg/flutter_svg.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:findemy_mobile/core/components/button/elevated_button.dart';
 import 'package:intl/intl.dart';
-
-class AcademyDetail {
-  final String id;
-  final String name;
-  final String address;
-  final String description;
-  final List<String> tags;
-  final String phone;
-  final String detailedAddress;
-  final String headerImageUrl;
-
-  AcademyDetail({
-    required this.id,
-    required this.name,
-    required this.address,
-    required this.description,
-    required this.tags,
-    required this.phone,
-    required this.detailedAddress,
-    required this.headerImageUrl,
-  });
-}
-
-class Lesson {
-  final String subject;
-  final String grade;
-  final String frequency;
-  final int price;
-
-  Lesson({
-    required this.subject,
-    required this.grade,
-    required this.frequency,
-    required this.price,
-  });
-}
+import 'package:findemy_mobile/services/api_services.dart';
+import 'package:findemy_mobile/models/academy_detail_model.dart';
+import 'package:findemy_mobile/models/lesson_model.dart';
+import 'package:findemy_mobile/models/subject_enum.dart';
 
 class AcademyDetailPage extends StatefulWidget {
   final String academyId;
@@ -52,39 +20,44 @@ class AcademyDetailPage extends StatefulWidget {
 }
 
 class _AcademyDetailPageState extends State<AcademyDetailPage> {
-  late AcademyDetail _academyDetail;
-  late List<Lesson> _lessons;
+  AcademyDetailModel? _academyDetail;
+  List<LessonModel>? _lessons;
   List<bool> _checked = [];
   bool _isSearchBarVisible = false;
+  bool _isLoading = true;
+  bool _hasError = false;
 
   @override
   void initState() {
     super.initState();
-    _loadMockData();
+    _fetchAcademyDetail();
   }
 
-  void _loadMockData() {
-    _academyDetail = AcademyDetail(
-      id: '1',
-      name: '메가스터디 교육',
-      address: '서울 서초구 서초 1동',
-      description:
-      '서초구에서 OO초등학생 조기 중학교 입학율 7명, 작년 서울대 합격 20명, 고려대/연세대 합격 30명이라는 기록을 달성하며 학원과 같이 성장해 나가는 메가스터디 교육입니다.',
-      tags: ['국어', '수학', '영어'],
-      phone: '02-1234-1231',
-      detailedAddress: '서울 서초구 효령로 321 덕원빌딩\n(서울 서초구 서초동 1603-54)',
-      headerImageUrl: '',
-    );
+  void _fetchAcademyDetail() async {
+    setState(() {
+      _isLoading = true;
+      _hasError = false;
+    });
 
-    _lessons = [
-      Lesson(subject: '수학', grade: '고1', frequency: '주 3회', price: 550000),
-      Lesson(subject: '수학', grade: '고1', frequency: '주 3회', price: 380000),
-      Lesson(subject: '수학', grade: '고1', frequency: '주 3회', price: 380000),
-      Lesson(subject: '수학', grade: '고1', frequency: '주 3회', price: 550000),
-      Lesson(subject: '수학', grade: '고1', frequency: '주 3회', price: 380000),
-    ];
-
-    _checked = List<bool>.filled(_lessons.length, false);
+    try {
+      final fetchedDetail = await ApiServices.detailAcademies(int.parse(widget.academyId));
+      if (mounted) {
+        setState(() {
+          _academyDetail = fetchedDetail;
+          _lessons = fetchedDetail.lessons;
+          _checked = List<bool>.filled(_lessons?.length ?? 0, false);
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+          print('오류: $e');
+        });
+      }
+    }
   }
 
   Widget _buildSearchBar() {
@@ -100,7 +73,12 @@ class _AcademyDetailPageState extends State<AcademyDetailPage> {
         ),
         hintText: '수능특강',
         trailing: [Icon(Symbols.search, color: FindemyColor.gray05)],
-        onTap: () {},
+        onTap: () {
+          // 메인 검색 페이지로 이동하는 로직을 추가
+        },
+        onSubmitted: (query) {
+          // 검색 결과 페이지로 이동
+        },
       ),
     );
   }
@@ -118,43 +96,62 @@ class _AcademyDetailPageState extends State<AcademyDetailPage> {
   }
 
   Widget _buildHeaderImage() {
-    if (_academyDetail.headerImageUrl.isEmpty) {
-      return Image.asset(
-        'assets/image/character.svg',
+    if (_academyDetail?.academyImgUrl != null && _academyDetail!.academyImgUrl!.isNotEmpty) {
+      return Image.network(
+        _academyDetail!.academyImgUrl!,
         fit: BoxFit.cover,
         width: double.infinity,
         height: 320,
         errorBuilder: (context, error, stackTrace) {
           return Center(
-            child: Container(
-              width: 150,
+            child: SvgPicture.asset(
+              'assets/image/character.svg',
+              width: double.infinity,
               height: 320,
-              child: SvgPicture.asset('assets/image/character.svg', width: 150, height: 150,),
+              fit: BoxFit.cover,
             ),
           );
         },
       );
     } else {
-      return Image.network(
-        _academyDetail.headerImageUrl,
-        fit: BoxFit.cover,
-        width: double.infinity,
-        height: 320,
-        errorBuilder: (context, error, stackTrace) {
-          return Image.asset(
-            'assets/image/character.svg',
-            fit: BoxFit.cover,
-            width: double.infinity,
-            height: 320,
-          );
-        },
+      return Center(
+        child: SvgPicture.asset(
+          'assets/image/character.svg',
+          width: double.infinity,
+          height: 320,
+          fit: BoxFit.cover,
+        ),
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final academy = _academyDetail;
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_hasError || _academyDetail == null) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('학원 정보를 불러오는데 실패했습니다.', style: TextStyle(color: Colors.red)),
+              const SizedBox(height: 8),
+              ElevatedButton(
+                onPressed: _fetchAcademyDetail,
+                child: const Text('다시 시도'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final academy = _academyDetail!;
 
     return Scaffold(
       body: Column(
@@ -163,7 +160,7 @@ class _AcademyDetailPageState extends State<AcademyDetailPage> {
             children: [
               ClipRRect(
                 borderRadius: const BorderRadius.all(
-                  Radius.circular(16),
+                  Radius.circular(5),
                 ),
                 child: _buildHeaderImage(),
               ),
@@ -215,13 +212,13 @@ class _AcademyDetailPageState extends State<AcademyDetailPage> {
           Expanded(
             child: Container(
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(40),
-                  topRight: Radius.circular(40),
-                ),
-                border: Border(
-                  top: BorderSide(color: FindemyColor.gray02, width: 2)
-                )
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(40),
+                    topRight: Radius.circular(40),
+                  ),
+                  border: Border(
+                      top: BorderSide(color: FindemyColor.gray02, width: 2)
+                  )
               ),
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(16),
@@ -229,7 +226,7 @@ class _AcademyDetailPageState extends State<AcademyDetailPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      academy.name,
+                      academy.academyName ?? '학원 이름 없음',
                       style: TextStyle(
                         color: FindemyColor.black,
                         fontSize: 22,
@@ -238,7 +235,7 @@ class _AcademyDetailPageState extends State<AcademyDetailPage> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      academy.address,
+                      academy.address ?? '주소 정보 없음',
                       style: TextStyle(
                         color: FindemyColor.gray05,
                         fontSize: 12,
@@ -248,14 +245,14 @@ class _AcademyDetailPageState extends State<AcademyDetailPage> {
                     const SizedBox(height: 16),
                     Container(
                       width: double.infinity,
-                      padding: EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(16),
                       decoration: BoxDecoration(
                         border: Border.all(color: FindemyColor.gray03),
                         borderRadius: BorderRadius.circular(8),
                         color: FindemyColor.white,
                       ),
                       child: Text(
-                        academy.description,
+                        academy.introduction ?? '학원 소개 없음',
                         style: TextStyle(
                           color: FindemyColor.black,
                           fontSize: 12,
@@ -292,7 +289,7 @@ class _AcademyDetailPageState extends State<AcademyDetailPage> {
                           child: Wrap(
                             spacing: 8,
                             runSpacing: 8,
-                            children: academy.tags.map((tag) {
+                            children: academy.subjects?.map((subjectEnum) {
                               return Container(
                                 padding: const EdgeInsets.symmetric(
                                   horizontal: 16,
@@ -306,7 +303,7 @@ class _AcademyDetailPageState extends State<AcademyDetailPage> {
                                   borderRadius: BorderRadius.circular(20),
                                 ),
                                 child: Text(
-                                  tag,
+                                  subjectEnum.displayName,
                                   style: TextStyle(
                                     color: FindemyColor.green500,
                                     fontSize: 12,
@@ -314,7 +311,7 @@ class _AcademyDetailPageState extends State<AcademyDetailPage> {
                                   ),
                                 ),
                               );
-                            }).toList(),
+                            }).toList() ?? [],
                           ),
                         ),
                       ],
@@ -336,7 +333,7 @@ class _AcademyDetailPageState extends State<AcademyDetailPage> {
                         ),
                         Expanded(
                           child: Text(
-                            academy.detailedAddress,
+                            academy.address ?? '상세 주소 정보 없음',
                             style: TextStyle(
                               color: FindemyColor.black,
                               fontSize: 12,
@@ -361,7 +358,7 @@ class _AcademyDetailPageState extends State<AcademyDetailPage> {
                           ),
                         ),
                         Text(
-                          academy.phone,
+                          academy.telNumber ?? '전화번호 정보 없음',
                           style: TextStyle(
                             color: FindemyColor.black,
                             fontSize: 12,
@@ -380,127 +377,13 @@ class _AcademyDetailPageState extends State<AcademyDetailPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    Column(
-                      children: [
-                        Container(
-                          decoration: const BoxDecoration(
-                            borderRadius: BorderRadius.all(
-                             Radius.circular(5)
-                            ),
-                          ),
-                          child: IntrinsicHeight(
-                            child: Row(
-                              children: [
-                                Expanded(
-                                  flex: 1,
-                                  child: _buildTableCell(
-                                    Center(
-                                      child: Text(
-                                        '체크',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: FindemyColor.black,
-                                        ),
-                                      ),
-                                    ),
-                                    isHeader: true,
-                                  ),
-                                ),
-                                Container(
-                                  width: 1,
-                                  color: FindemyColor.white,
-                                ),
-                                Expanded(
-                                  flex: 2,
-                                  child: _buildTableCell(
-                                    Center(
-                                      child: Text(
-                                        '과목',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: FindemyColor.black,
-                                        ),
-                                      ),
-                                    ),
-                                    isHeader: true,
-                                  ),
-                                ),
-                                Container(
-                                  width: 1,
-                                  color: FindemyColor.white,
-                                ),
-                                Expanded(
-                                  flex: 1,
-                                  child: _buildTableCell(
-                                    Center(
-                                      child: Text(
-                                        '학년',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: FindemyColor.black,
-                                        ),
-                                      ),
-                                    ),
-                                    isHeader: true,
-                                  ),
-                                ),
-                                Container(
-                                  width: 1,
-                                  color: FindemyColor.white,
-                                ),
-                                Expanded(
-                                  flex: 1,
-                                  child: _buildTableCell(
-                                    Center(
-                                      child: Text(
-                                        '차수',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: FindemyColor.black,
-                                        ),
-                                      ),
-                                    ),
-                                    isHeader: true,
-                                  ),
-                                ),
-                                Container(
-                                  width: 1,
-                                  color: FindemyColor.white,
-                                ),
-                                Expanded(
-                                  flex: 2,
-                                  child: _buildTableCell(
-                                    Center(
-                                      child: Text(
-                                        '금액',
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w600,
-                                          color: FindemyColor.black,
-                                        ),
-                                      ),
-                                    ),
-                                    isHeader: true,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-
-                        for (int i = 0; i < _lessons.length; i++)
+                    if (_lessons != null && _lessons!.isNotEmpty)
+                      Column(
+                        children: [
                           Container(
-                            decoration: BoxDecoration(
-                              color: FindemyColor.white,
-                              border: Border(
-                                bottom: BorderSide(
-                                  color: FindemyColor.gray02,
-                                  width: 1,
-                                ),
+                            decoration: const BoxDecoration(
+                              borderRadius: BorderRadius.all(
+                                  Radius.circular(5)
                               ),
                             ),
                             child: IntrinsicHeight(
@@ -510,95 +393,88 @@ class _AcademyDetailPageState extends State<AcademyDetailPage> {
                                     flex: 1,
                                     child: _buildTableCell(
                                       Center(
-                                        child: Container(
-                                          width: 20,
-                                          height: 20,
-                                          decoration: BoxDecoration(
-                                            color: _checked[i]
-                                                ? FindemyColor.green500
-                                                : FindemyColor.white,
-                                            border: Border.all(
-                                              color: _checked[i]
-                                                  ? FindemyColor.green500
-                                                  : FindemyColor.gray03,
-                                              width: 1,
-                                            ),
-                                            borderRadius: BorderRadius.circular(4),
-                                          ),
-                                          child: Material(
-                                            color: Colors.transparent,
-                                            child: InkWell(
-                                              onTap: () {
-                                                setState(() {
-                                                  _checked[i] = !_checked[i];
-                                                });
-                                              },
-                                              borderRadius: BorderRadius.circular(4),
-                                              child: _checked[i]
-                                                  ? Center(
-                                                child: Icon(
-                                                  Icons.check,
-                                                  color: FindemyColor.white,
-                                                  size: 12,
-                                                ),
-                                              )
-                                                  : null,
-                                            ),
+                                        child: Text(
+                                          '체크',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: FindemyColor.black,
                                           ),
                                         ),
                                       ),
+                                      isHeader: true,
                                     ),
+                                  ),
+                                  Container(
+                                    width: 1,
+                                    color: FindemyColor.white,
                                   ),
                                   Expanded(
                                     flex: 2,
                                     child: _buildTableCell(
                                       Center(
                                         child: Text(
-                                          _lessons[i].subject,
+                                          '과목',
                                           style: TextStyle(
                                             fontSize: 12,
+                                            fontWeight: FontWeight.w600,
                                             color: FindemyColor.black,
                                           ),
                                         ),
                                       ),
                                     ),
                                   ),
-                                  Expanded(
-                                    flex: 1,
-                                    child: _buildTableCell(
-                                      Center(
-                                        child: Text(
-                                          _lessons[i].grade,
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            color: FindemyColor.black,
-                                          ),
-                                        ),
-                                      ),
-                                    ),
+                                  Container(
+                                    width: 1,
+                                    color: FindemyColor.white,
                                   ),
                                   Expanded(
                                     flex: 1,
                                     child: _buildTableCell(
                                       Center(
                                         child: Text(
-                                          _lessons[i].frequency,
+                                          '학년',
                                           style: TextStyle(
                                             fontSize: 12,
+                                            fontWeight: FontWeight.w600,
                                             color: FindemyColor.black,
                                           ),
                                         ),
                                       ),
                                     ),
+                                  ),
+                                  Container(
+                                    width: 1,
+                                    color: FindemyColor.white,
+                                  ),
+                                  Expanded(
+                                    flex: 1,
+                                    child: _buildTableCell(
+                                      Center(
+                                        child: Text(
+                                          '차수',
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: FindemyColor.black,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  Container(
+                                    width: 1,
+                                    color: FindemyColor.white,
                                   ),
                                   Expanded(
                                     flex: 2,
                                     child: _buildTableCell(
                                       Center(
                                         child: Text(
-                                          _formatCurrency(_lessons[i].price),
+                                          '금액',
                                           style: TextStyle(
                                             fontSize: 12,
+                                            fontWeight: FontWeight.w600,
                                             color: FindemyColor.black,
                                           ),
                                         ),
@@ -609,8 +485,133 @@ class _AcademyDetailPageState extends State<AcademyDetailPage> {
                               ),
                             ),
                           ),
-                      ],
-                    ),
+
+                          for (int i = 0; i < _lessons!.length; i++)
+                            Container(
+                              decoration: BoxDecoration(
+                                color: FindemyColor.white,
+                                border: Border(
+                                  bottom: BorderSide(
+                                    color: FindemyColor.gray02,
+                                    width: 1,
+                                  ),
+                                ),
+                              ),
+                              child: IntrinsicHeight(
+                                child: Row(
+                                  children: [
+                                    Expanded(
+                                      flex: 1,
+                                      child: _buildTableCell(
+                                        Center(
+                                          child: Container(
+                                            width: 20,
+                                            height: 20,
+                                            decoration: BoxDecoration(
+                                              color: _checked[i]
+                                                  ? FindemyColor.green500
+                                                  : FindemyColor.white,
+                                              border: Border.all(
+                                                color: _checked[i]
+                                                    ? FindemyColor.green500
+                                                    : FindemyColor.gray03,
+                                                width: 1,
+                                              ),
+                                              borderRadius: BorderRadius.circular(4),
+                                            ),
+                                            child: Material(
+                                              color: Colors.transparent,
+                                              child: InkWell(
+                                                onTap: () {
+                                                  setState(() {
+                                                    _checked[i] = !_checked[i];
+                                                  });
+                                                },
+                                                borderRadius: BorderRadius.circular(4),
+                                                child: _checked[i]
+                                                    ? Center(
+                                                  child: Icon(
+                                                    Icons.check,
+                                                    color: FindemyColor.white,
+                                                    size: 12,
+                                                  ),
+                                                )
+                                                    : null,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 2,
+                                      child: _buildTableCell(
+                                        Center(
+                                          child: Text(
+                                            _lessons![i].subject?.displayName ?? 'N/A',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: FindemyColor.black,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 1,
+                                      child: _buildTableCell(
+                                        Center(
+                                          child: Text(
+                                            _lessons![i].grade?.displayName ?? 'N/A',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: FindemyColor.black,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 1,
+                                      child: _buildTableCell(
+                                        Center(
+                                          child: Text(
+                                            _lessons![i].number?.displayName ?? 'N/A',
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: FindemyColor.black,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 2,
+                                      child: _buildTableCell(
+                                        Center(
+                                          child: Text(
+                                            _formatCurrency(_lessons![i].amount ?? 0),
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: FindemyColor.black,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                        ],
+                      )
+                    else // 수업 정보가 없을 경우
+                      const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(20.0),
+                          child: Text('수업 정보가 없습니다.'),
+                        ),
+                      ),
                     const SizedBox(height: 80),
                   ],
                 ),
@@ -625,7 +626,7 @@ class _AcademyDetailPageState extends State<AcademyDetailPage> {
           child: CustomElevatedButton(
             text: '찜 하기',
             onPressed: () {
-              final selectedLessons = _lessons
+              final selectedLessons = _lessons!
                   .asMap()
                   .entries
                   .where((entry) => _checked[entry.key])
@@ -638,9 +639,12 @@ class _AcademyDetailPageState extends State<AcademyDetailPage> {
                 );
                 return;
               }
-
-              Navigator.pushNamed(
-                  context, '/wishlist', arguments: selectedLessons);
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => MainPage(),
+                ),
+              );
             },
           ),
         ),

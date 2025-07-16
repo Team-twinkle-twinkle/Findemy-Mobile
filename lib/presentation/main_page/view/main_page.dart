@@ -1,67 +1,14 @@
 import 'dart:async';
 import 'package:findemy_mobile/core/components/header/logo_header.dart';
 import 'package:findemy_mobile/core/constants/color.dart';
+import 'package:findemy_mobile/models/academy_model.dart';
+import 'package:findemy_mobile/models/all_academy_model.dart';
+import 'package:findemy_mobile/models/subject_enum.dart';
 import 'package:findemy_mobile/presentation/academy_page/view/academy_detail_page.dart';
+import 'package:findemy_mobile/services/api_services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:material_symbols_icons/symbols.dart';
-
-class Academy {
-  final String id;
-  final String name;
-  final String address;
-  final List<String> tags;
-  final String imageUrl;
-
-  Academy({
-    required this.id,
-    required this.name,
-    required this.address,
-    required this.tags,
-    required this.imageUrl,
-  });
-
-  factory Academy.fromJson(Map<String, dynamic> json) {
-    return Academy(
-      id: json['id']?.toString() ?? '',
-      name: json['name'] ?? '',
-      address: json['address'] ?? '',
-      tags: List<String>.from(json['tags'] ?? []),
-      imageUrl: json['imageUrl'] ?? '',
-    );
-  }
-}
-
-class AcademyService {
-  static Future<List<Academy>> fetchAcademies({String? category}) async {
-    await Future.delayed(const Duration(milliseconds: 100));
-
-    final allAcademies = [
-      Academy(
-        id: '1',
-        name: "메가스터디 교육",
-        address: "서울 서초구 서초 1동",
-        tags: ["#국어", "#수학", "#영어"],
-        imageUrl: "assets/image/academy1.svg",
-      ),
-      Academy(
-        id: '2',
-        name: "파고다어학원",
-        address: "서울 서초구 서초 4동",
-        tags: ["#국어", "#영어"],
-        imageUrl: "assets/image/academy2.svg",
-      ),
-    ];
-
-    if (category == null || category == "전체") {
-      return allAcademies;
-    } else {
-      return allAcademies.where((academy) {
-        return academy.tags.any((tag) => tag.contains(category));
-      }).toList();
-    }
-  }
-}
 
 class MainPage extends StatefulWidget {
   const MainPage({super.key});
@@ -77,14 +24,18 @@ class _MainPageState extends State<MainPage> {
 
   final List<String> _bannerImages = [
     'assets/image/banner1.svg',
-    'assets/image/banner2.svg',
-    'assets/image/banner3.svg',
+    'assets/image/banner2.svg'
   ];
 
   String _selectedCategory = "전체";
-  final List<String> _categories = ["전체", "국어", "수학", "사회", "과학", "영어"];
+  final List<String> _categories = [
+    "전체",
+    ...SubjectEnum.values.map((e) => e.displayName)
+  ];
 
-  List<Academy> _academies = [];
+  List<AcademyModel> _allAcademies = [];
+  List<AcademyModel> _filteredAcademies = [];
+
   bool _isLoadingAcademies = false;
   String? _errorMessage;
 
@@ -97,10 +48,11 @@ class _MainPageState extends State<MainPage> {
   }
 
   Future<void> _loadInitialData() async {
-    await _loadAcademies();
+    await _fetchAllAcademies();
+    _applyCategoryFilter();
   }
 
-  Future<void> _loadAcademies() async {
+  Future<void> _fetchAllAcademies() async {
     if (!mounted) return;
 
     setState(() {
@@ -109,12 +61,10 @@ class _MainPageState extends State<MainPage> {
     });
 
     try {
-      final academies = await AcademyService.fetchAcademies(
-        category: _selectedCategory == "전체" ? null : _selectedCategory,
-      );
+      final AllAcademyModel response = await ApiServices.allAcademies();
       if (mounted) {
         setState(() {
-          _academies = academies;
+          _allAcademies = response.academies ?? [];
           _isLoadingAcademies = false;
         });
       }
@@ -126,6 +76,19 @@ class _MainPageState extends State<MainPage> {
         });
       }
     }
+  }
+
+  void _applyCategoryFilter() {
+    if (_selectedCategory == "전체") {
+      _filteredAcademies = List.from(_allAcademies);
+    } else {
+      _filteredAcademies = _allAcademies.where((academy) {
+        return academy.subjects?.any((subjectEnum) =>
+        subjectEnum.displayName == _selectedCategory) ==
+            true;
+      }).toList();
+    }
+    setState(() {});
   }
 
   void _startBannerAutoSlide() {
@@ -159,7 +122,7 @@ class _MainPageState extends State<MainPage> {
       _selectedCategory = category;
     });
 
-    await _loadAcademies();
+    _applyCategoryFilter();
   }
 
   Future<void> _onRefresh() async {
@@ -216,7 +179,15 @@ class _MainPageState extends State<MainPage> {
         ),
         hintText: '수능특강',
         trailing: [Icon(Symbols.search, color: FindemyColor.gray05)],
-        onTap: () {},
+        onTap: () {
+          // 검색 바 탭 시 로직 추가 (예: 검색 페이지로 이동)
+        },
+        onSubmitted: (query) {
+          // 검색 기능 추가 시 여기에 로직 구현
+          // 현재는 카테고리 필터링만 있으므로 검색어 필터링 로직은 추가되지 않음
+          // 만약 검색 기능을 클라이언트에서 구현하려면 _allAcademies를 기반으로 추가 필터링 필요
+          print('검색어 제출: $query');
+        },
       ),
     );
   }
@@ -355,13 +326,13 @@ class _MainPageState extends State<MainPage> {
                 style: TextStyle(color: FindemyColor.gray04, fontSize: 14),
                 textAlign: TextAlign.center),
             const SizedBox(height: 16),
-            ElevatedButton(onPressed: _loadAcademies, child: const Text('다시 시도')),
+            ElevatedButton(onPressed: _onRefresh, child: const Text('다시 시도')),
           ],
         ),
       );
     }
 
-    if (_academies.isEmpty) {
+    if (_filteredAcademies.isEmpty) {
       return Padding(
         padding: const EdgeInsets.all(50),
         child: Column(
@@ -382,20 +353,20 @@ class _MainPageState extends State<MainPage> {
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       padding: const EdgeInsets.symmetric(horizontal: 14),
-      itemCount: _academies.length,
+      itemCount: _filteredAcademies.length,
       separatorBuilder: (context, index) => Divider(
         color: FindemyColor.gray02,
         height: 1,
       ),
       itemBuilder: (context, index) {
-        final academy = _academies[index];
+        final academy = _filteredAcademies[index];
         return _AcademyCard(
           academy: academy,
           onTap: () {
             Navigator.push(
               context,
               MaterialPageRoute(
-                builder: (context) => AcademyDetailPage(academyId: academy.id),
+                builder: (context) => AcademyDetailPage(academyId: academy.academyId.toString()),
               ),
             );
           },
@@ -406,7 +377,7 @@ class _MainPageState extends State<MainPage> {
 }
 
 class _AcademyCard extends StatelessWidget {
-  final Academy academy;
+  final AcademyModel academy;
   final VoidCallback? onTap;
 
   const _AcademyCard({
@@ -428,26 +399,39 @@ class _AcademyCard extends StatelessWidget {
               height: 80,
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(8),
+                color: FindemyColor.gray02,
               ),
-              child: SvgPicture.asset('assets/image/character.svg')
+              child: (academy.academyImgUrl != null && academy.academyImgUrl!.isNotEmpty)
+                  ? Image.network(
+                academy.academyImgUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Center(
+                    child: SvgPicture.asset('assets/image/character.svg', width: 40, height: 40),
+                  );
+                },
+              )
+                  : Center(
+                child: SvgPicture.asset('assets/image/character.svg', width: 40, height: 40),
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(academy.name,
+                  Text(academy.academyName ?? '이름 없음',
                       style:
                       const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                   const SizedBox(height: 2),
-                  Text(academy.address,
+                  Text(academy.address ?? '주소 없음',
                       style: TextStyle(color: FindemyColor.gray04, fontSize: 12)),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
-                    children: academy.tags.map((tag) {
+                    children: academy.subjects?.map((subjectEnum) {
                       return Text(
-                        tag,
+                        '#${subjectEnum.displayName}',
                         style: TextStyle(
                           color: FindemyColor.gray04,
                           fontSize: 12,
@@ -456,7 +440,7 @@ class _AcademyCard extends StatelessWidget {
                           decorationColor: FindemyColor.gray04,
                         ),
                       );
-                    }).toList(),
+                    }).toList() ?? [],
                   ),
                 ],
               ),

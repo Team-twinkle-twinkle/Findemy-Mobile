@@ -3,12 +3,18 @@ import 'package:findemy_mobile/core/components/button/elevated_button.dart';
 import 'package:findemy_mobile/core/components/checkbox.dart';
 import 'package:findemy_mobile/core/components/text_form_field/custom_text_form_field.dart';
 import 'package:findemy_mobile/core/constants/color.dart';
+import 'package:findemy_mobile/models/login_model.dart';
+import 'package:findemy_mobile/models/user_model.dart';
 import 'package:findemy_mobile/presentation/login_page/view/sign_up_page.dart';
+import 'package:findemy_mobile/presentation/main_app.dart';
+import 'package:findemy_mobile/services/api_services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:material_symbols_icons/symbols.dart';
 
 class LoginPage extends StatefulWidget {
+  const LoginPage({super.key});
+
   @override
   _LoginPageState createState() => _LoginPageState();
 }
@@ -19,15 +25,54 @@ class _LoginPageState extends State<LoginPage> {
   bool _isPasswordVisible = false;
   bool _rememberLogin = false;
   String? _errorMessage;
+  bool _isLoading = false;
+
+  Future<void> _handleLogin() async {
+    try {
+      final user = UserModel(
+        accountId: _userIdController.text,
+        password: _passwordController.text,
+      );
+
+      final LoginModel response = await ApiServices.loginUser(user);
+
+      print('로그인 성공: Access Token = ${response.accessToken}');
+      print('로그인 성공: Refresh Token = ${response.refreshToken}');
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const MainApp()),
+            (route) => false,
+      );
+
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('오류: ${e.toString()}')),
+      );
+    } finally {
+      setState(() {
+        _isLoading = false;
+        _errorMessage = null;
+      });
+    }
+  }
+
+
+  @override
+  void dispose() {
+    _userIdController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: Padding(
-        padding: EdgeInsets.all(15),
+      body: SingleChildScrollView(
+        padding: EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
+            SizedBox(height: MediaQuery.of(context).padding.top + 100),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
@@ -113,7 +158,7 @@ class _LoginPageState extends State<LoginPage> {
                 Expanded(
                   child: _errorMessage != null
                       ? Text(
-                    _errorMessage!,
+                    '일치하는 사용자가 없습니다',
                     style: TextStyle(
                       color: FindemyColor.error,
                       fontSize: 12,
@@ -135,12 +180,7 @@ class _LoginPageState extends State<LoginPage> {
             SizedBox(height: 32),
             CustomElevatedButton(
               text: '로그인',
-              onPressed: () {
-                setState(() {
-                  _errorMessage = '일치하는 사용자가 없습니다.';
-                });
-                print('login');
-              },
+              onPressed: _isLoading ? null : () => _handleLogin(),
             ),
             SizedBox(height: 24),
             Row(
@@ -155,7 +195,7 @@ class _LoginPageState extends State<LoginPage> {
                   onTap: () {
                     Navigator.push(
                       context,
-                      MaterialPageRoute(builder: (context) => SignUpPage()),
+                      MaterialPageRoute(builder: (context) => const SignUpPage()),
                     );
                   },
                   child: Text(

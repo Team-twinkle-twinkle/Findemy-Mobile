@@ -18,7 +18,7 @@ class MyApp extends StatelessWidget {
       theme: ThemeData(
         scaffoldBackgroundColor: FindemyColor.white,
       ),
-      home: MainApp(),
+      home: OnBoardingPage(),
     );
   }
 }

@@ -1,22 +1,39 @@
-class Lesson {
-  final String subject;
-  final String grade;
-  final String frequency;
-  final String price;
+import 'package:findemy_mobile/models/grade_enum.dart';
+import 'package:findemy_mobile/models/number_enum.dart';
+import 'package:findemy_mobile/models/subject_enum.dart';
 
-  Lesson({
-    required this.subject,
-    required this.grade,
-    required this.frequency,
-    required this.price,
+class LessonModel {
+  SubjectEnum? subject;
+  GradeEnum? grade;
+  NumberEnum? number;
+  int? amount; // 가격
+
+  LessonModel({
+    this.subject,
+    this.grade,
+    this.number,
+    this.amount,
   });
 
-  factory Lesson.fromJson(Map<String, dynamic> json) {
-    return Lesson(
-      subject: json['subject'],
-      grade: json['grade'],
-      frequency: json['frequency'],
-      price: json['price'],
-    );
+  LessonModel.fromJson(Map<String, dynamic> json) {
+    subject = json['subject'] != null
+        ? SubjectEnumExtension.fromString(json['subject'])
+        : null;
+    grade = json['grade'] != null
+        ? GradeEnum.fromString(json['grade'])
+        : null;
+    number = json['number'] != null
+        ? NumberEnum.fromString(json['number'])
+        : null;
+    amount = json['amount'];
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'subject': subject?.toString().split('.').last,
+      'grade': grade?.toString().split('.').last,
+      'number': number?.toString().split('.').last,
+      'amount': amount,
+    };
   }
 }

@@ -1,6 +1,7 @@
 import 'package:findemy_mobile/core/components/bottom_navigation_bar.dart';
 import 'package:findemy_mobile/presentation/academy_page/view/academy_page.dart';
 import 'package:findemy_mobile/presentation/main_page/view/main_page.dart';
+import 'package:findemy_mobile/presentation/mypage/view/mypage.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -47,7 +48,7 @@ class _MainAppState extends ConsumerState<MainApp> {
           children: [
             _buildOffstageNavigator(0, const MainPage()),
             _buildOffstageNavigator(1, const AcademyPage()),
-            _buildOffstageNavigator(2, const Placeholder()),
+            _buildOffstageNavigator(2, const MyPage()),
           ],
         ),
       ),
