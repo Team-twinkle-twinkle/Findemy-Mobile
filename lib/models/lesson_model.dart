@@ -6,7 +6,7 @@ class LessonModel {
   SubjectEnum? subject;
   GradeEnum? grade;
   NumberEnum? number;
-  int? amount; // 가격
+  int? amount;
 
   LessonModel({
     this.subject,

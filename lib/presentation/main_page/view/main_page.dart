@@ -8,7 +8,7 @@ import 'package:findemy_mobile/presentation/academy_page/view/academy_detail_pag
 import 'package:findemy_mobile/services/api_services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
-import 'package:material_symbols_icons/symbols.dart';
+import 'package:material_symbols_icons/material_symbols_icons.dart';
 
 class MainPage extends StatefulWidget {
   const MainPage({super.key});
@@ -33,8 +33,9 @@ class _MainPageState extends State<MainPage> {
     ...SubjectEnum.values.map((e) => e.displayName)
   ];
 
-  List<AcademyModel> _allAcademies = [];
-  List<AcademyModel> _filteredAcademies = [];
+  // Changed to List<Academy>
+  List<Academy> _allAcademies = [];
+  List<Academy> _filteredAcademies = [];
 
   bool _isLoadingAcademies = false;
   String? _errorMessage;
@@ -42,7 +43,7 @@ class _MainPageState extends State<MainPage> {
   @override
   void initState() {
     super.initState();
-    _bannerPageController = PageController(viewportFraction: 0.9);
+    _bannerPageController = PageController(viewportFraction: 1);
     _loadInitialData();
     _startBannerAutoSlide();
   }
@@ -64,7 +65,8 @@ class _MainPageState extends State<MainPage> {
       final AllAcademyModel response = await ApiServices.allAcademies();
       if (mounted) {
         setState(() {
-          _allAcademies = response.academies ?? [];
+          // response.academies is already List<Academy>
+          _allAcademies = response.academies;
           _isLoadingAcademies = false;
         });
       }
@@ -83,9 +85,10 @@ class _MainPageState extends State<MainPage> {
       _filteredAcademies = List.from(_allAcademies);
     } else {
       _filteredAcademies = _allAcademies.where((academy) {
-        return academy.subjects?.any((subjectEnum) =>
-        subjectEnum.displayName == _selectedCategory) ==
-            true;
+        return academy.subjects.any((subject) {
+          String koreanSubject = SubjectEnumExtension.toKorean(subject);
+          return koreanSubject == _selectedCategory;
+        });
       }).toList();
     }
     setState(() {});
@@ -151,7 +154,7 @@ class _MainPageState extends State<MainPage> {
                 _buildSearchBar(),
                 const SizedBox(height: 16),
                 _buildBannerSection(),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
                 Divider(color: FindemyColor.gray02),
                 const SizedBox(height: 6),
                 _buildSectionTitle(),
@@ -377,7 +380,8 @@ class _MainPageState extends State<MainPage> {
 }
 
 class _AcademyCard extends StatelessWidget {
-  final AcademyModel academy;
+  // Changed to Academy
+  final Academy academy;
   final VoidCallback? onTap;
 
   const _AcademyCard({
@@ -420,18 +424,19 @@ class _AcademyCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(academy.academyName ?? '이름 없음',
+                  Text(academy.academyName, // academyName is not nullable
                       style:
                       const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                   const SizedBox(height: 2),
-                  Text(academy.address ?? '주소 없음',
+                  Text(academy.address ?? '주소 없음', // Use ?? for nullable address
                       style: TextStyle(color: FindemyColor.gray04, fontSize: 12)),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
-                    children: academy.subjects?.map((subjectEnum) {
+                    children: academy.subjects.map((subject) {
+                      String displaySubject = SubjectEnumExtension.toKorean(subject);
                       return Text(
-                        '#${subjectEnum.displayName}',
+                        '#$displaySubject',
                         style: TextStyle(
                           color: FindemyColor.gray04,
                           fontSize: 12,
@@ -440,7 +445,7 @@ class _AcademyCard extends StatelessWidget {
                           decorationColor: FindemyColor.gray04,
                         ),
                       );
-                    }).toList() ?? [],
+                    }).toList(),
                   ),
                 ],
               ),

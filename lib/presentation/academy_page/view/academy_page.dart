@@ -1,17 +1,13 @@
-import 'package:findemy_mobile/core/components/button/elevated_button.dart';
-import 'package:findemy_mobile/models/academy_model.dart';
-import 'package:findemy_mobile/models/subject_enum.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
 import 'package:findemy_mobile/core/components/header/logo_header.dart';
 import 'package:findemy_mobile/core/constants/color.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:findemy_mobile/models/academy_model.dart';
+import 'package:findemy_mobile/models/all_academy_model.dart';
 import 'package:findemy_mobile/presentation/academy_page/view/academy_detail_page.dart';
-
-// Import API services and models
-import 'package:findemy_mobile/services/api_services.dart'; // Make sure this path is correct
-import 'package:findemy_mobile/models/all_academy_model.dart'; // Make sure this path is correct
-
+import 'package:findemy_mobile/services/api_services.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class AcademyPage extends StatefulWidget {
   const AcademyPage({super.key});
@@ -26,9 +22,9 @@ class _AcademyPageState extends State<AcademyPage> {
   String? _selectedCity;
   String? _selectedDistrict;
 
-  // Change _allAcademies to hold data fetched from API
-  List<AcademyModel>? _allAcademies;
-  List<AcademyModel>? _filteredAcademies;
+  // Changed to List<Academy>
+  List<Academy>? _allAcademies;
+  List<Academy>? _filteredAcademies;
   bool _isLoading = true;
   bool _hasError = false;
 
@@ -77,10 +73,43 @@ class _AcademyPageState extends State<AcademyPage> {
   @override
   void initState() {
     super.initState();
-    _loadInitialData();
+    _initializeAuthAndLoadData();
   }
 
-  // Modified to fetch from API
+  void _initializeAuthAndLoadData() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final accessToken = prefs.getString('accessToken');
+
+      print('저장된 토큰: $accessToken');
+
+      if (accessToken == null || accessToken.isEmpty) {
+        print('토큰이 없습니다. 로그인이 필요합니다.');
+        if (mounted) {
+          setState(() {
+            _isLoading = false;
+            _hasError = true;
+          });
+        }
+        return;
+      }
+
+      ApiServices.setAuthorizationToken(accessToken);
+
+      await Future.delayed(const Duration(milliseconds: 100));
+
+      _loadInitialData();
+    } catch (e) {
+      print('토큰 초기화 중 오류: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+          _hasError = true;
+        });
+      }
+    }
+  }
+
   void _loadInitialData() async {
     setState(() {
       _isLoading = true;
@@ -94,7 +123,7 @@ class _AcademyPageState extends State<AcademyPage> {
           _allAcademies = response.academies;
           _isLoading = false;
         });
-        _applyFilters(); // Apply filters once data is loaded
+        _applyFilters();
       }
     } catch (e) {
       if (mounted) {
@@ -113,13 +142,13 @@ class _AcademyPageState extends State<AcademyPage> {
       return;
     }
 
-    List<AcademyModel> tempAcademies = List.from(_allAcademies!);
+    List<Academy> tempAcademies = List.from(_allAcademies!);
 
     if (_searchQuery.isNotEmpty) {
       tempAcademies = tempAcademies.where((academy) =>
-      (academy.academyName?.contains(_searchQuery) == true) ||
+      (academy.academyName.contains(_searchQuery)) || // academyName is not nullable
           (academy.address?.contains(_searchQuery) == true) ||
-          (academy.subjects?.any((subject) => subject.displayName.contains(_searchQuery)) == true)
+          (academy.subjects.any((subject) => subject.contains(_searchQuery))) // subjects is List<String>
       ).toList();
     }
 
@@ -132,31 +161,12 @@ class _AcademyPageState extends State<AcademyPage> {
       academy.address?.contains(_selectedDistrict!) == true).toList();
     }
 
-    // You commented these out previously, but if AcademyModel is updated with grades/frequency,
-    // you would uncomment and adjust these to match the AcademyModel properties.
-    // Assuming for now AcademyModel doesn't directly have 'grades' or 'frequency' fields as strings
-    // final List<String> selectedGrades = _getFilterValues('나이');
-    // if (selectedGrades.isNotEmpty) {
-    //   tempAcademies = tempAcademies.where((academy) {
-    //     if (academy.grades == null) return false;
-    //     return selectedGrades.any((grade) => academy.grades!.contains(grade));
-    //   }).toList();
-    // }
-    //
-    // final List<String> selectedFrequencies = _getFilterValues('차수');
-    // if (selectedFrequencies.isNotEmpty) {
-    //   tempAcademies = tempAcademies.where((academy) {
-    //     if (academy.frequency == null) return false;
-    //     return selectedFrequencies.any((freq) => academy.frequency! == freq);
-    //   }).toList();
-    // }
-
     final List<String> selectedSubjects = _getFilterValues('과목');
     if (selectedSubjects.isNotEmpty) {
       tempAcademies = tempAcademies.where((academy) {
-        if (academy.subjects == null) return false;
+        // academy.subjects is List<String>, directly check against it
         return selectedSubjects.any((selectedSubjectName) =>
-            academy.subjects!.any((subjectEnum) => subjectEnum.displayName == selectedSubjectName));
+            academy.subjects.any((subject) => subject == selectedSubjectName));
       }).toList();
     }
 
@@ -390,10 +400,10 @@ class _AcademyPageState extends State<AcademyPage> {
   Widget _buildFilterOverlay() {
     return Positioned.fill(
       child: Container(
-        color: Colors.black.withValues(alpha: 0.5),
+        color: Colors.black.withOpacity(0.5), // 배경 불투명도 50%
         child: Align(
           alignment: Alignment.bottomCenter,
-          child: FractionallySizedBox(
+          child: FractionallySizedBox( // 화면 높이의 70% 차지
             heightFactor: 0.7,
             child: Container(
               padding: const EdgeInsets.all(20),
@@ -429,6 +439,7 @@ class _AcademyPageState extends State<AcademyPage> {
                     ],
                   ),
                   const SizedBox(height: 24),
+                  // 필터링 옵션들을 스크롤 가능하게 만들기
                   Expanded(
                     child: SingleChildScrollView(
                       child: Column(
@@ -455,6 +466,7 @@ class _AcademyPageState extends State<AcademyPage> {
                       ),
                     ),
                   ),
+                  // 하단 버튼들
                   Row(
                     children: [
                       Expanded(
@@ -467,8 +479,8 @@ class _AcademyPageState extends State<AcademyPage> {
                                 value.clear();
                                 value.add('${key}_전체');
                               });
-                              _searchQuery = '';
-                              _applyFilters();
+                              _searchQuery = ''; // 검색어 초기화
+                              _applyFilters(); // 필터 초기화 후 다시 필터 적용
                             });
                           },
                           child: Text(
@@ -485,14 +497,28 @@ class _AcademyPageState extends State<AcademyPage> {
                       ),
                       const SizedBox(width: 16),
                       Expanded(
-                        child: CustomElevatedButton(
-                          text: '적용 및 검색하기',
+                        child: ElevatedButton(
                           onPressed: () {
                             setState(() {
                               _isFilterVisible = false;
-                              _applyFilters();
+                              _applyFilters(); // 필터 적용
                             });
                           },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: FindemyColor.green500,
+                            foregroundColor: FindemyColor.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                          child: const Text(
+                            '적용 및 검색하기',
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
                         ),
                       ),
                     ],
@@ -545,7 +571,7 @@ class _AcademyPageState extends State<AcademyPage> {
               onChanged: (String? newValue) {
                 setState(() {
                   _selectedCity = newValue;
-                  _selectedDistrict = null; // Reset district when city changes
+                  _selectedDistrict = null; // 시/도가 변경되면 시/군/구 초기화
                 });
               },
             ),
@@ -575,7 +601,6 @@ class _AcademyPageState extends State<AcademyPage> {
               hint: const Text('-', style: TextStyle(color: FindemyColor.gray05)),
               icon: Icon(Symbols.arrow_drop_down, color: FindemyColor.gray05),
               dropdownColor: FindemyColor.white,
-              // Only enable if a city is selected
               items: _selectedCity != null && _districts[_selectedCity] != null
                   ? _districts[_selectedCity]!.map((String district) {
                 return DropdownMenuItem<String>(
@@ -586,10 +611,8 @@ class _AcademyPageState extends State<AcademyPage> {
                   ),
                 );
               }).toList()
-                  : [], // Empty list if no city selected
-              onChanged: _selectedCity == null
-                  ? null // Disable if no city selected
-                  : (String? newValue) {
+                  : [],
+              onChanged: (String? newValue) {
                 setState(() {
                   _selectedDistrict = newValue;
                 });
@@ -617,7 +640,6 @@ class _AcademyPageState extends State<AcademyPage> {
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          // Value used for filtering should match AcademyModel property (if added)
           children: _grades.map((grade) => _buildFilterChip(grade, '나이', grade)).toList(),
         ),
       ],
@@ -640,7 +662,6 @@ class _AcademyPageState extends State<AcademyPage> {
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          // Value used for filtering should match AcademyModel property (if added)
           children: _frequencies.map((freq) => _buildFilterChip(freq, '차수', freq)).toList(),
         ),
       ],
@@ -663,7 +684,6 @@ class _AcademyPageState extends State<AcademyPage> {
         Wrap(
           spacing: 8,
           runSpacing: 8,
-          // Value used for filtering should match SubjectEnum.displayName
           children: _subjects.map((subject) => _buildFilterChip(subject, '과목', subject)).toList(),
         ),
       ],
@@ -695,7 +715,6 @@ class _AcademyPageState extends State<AcademyPage> {
               currentCategoryChips.add('${category}_전체');
             }
           }
-          // No need to call _applyFilters here, it will be called by '적용 및 검색하기'
         });
       },
       child: Container(
@@ -720,22 +739,60 @@ class _AcademyPageState extends State<AcademyPage> {
   }
 
   Widget _buildAcademyList() {
-    if (_filteredAcademies == null || _filteredAcademies!.isEmpty) {
-      return const Center(
-        child: Padding(
-          padding: EdgeInsets.all(20.0),
-          child: Text('검색 결과가 없습니다.'),
+    if (_isLoading) {
+      return const Padding(
+        padding: EdgeInsets.all(50),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_hasError) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.error_outline, size: 48, color: FindemyColor.gray04),
+            const SizedBox(height: 16),
+            Text('학원 정보를 불러오는데 실패했습니다.',
+                style: TextStyle(color: FindemyColor.gray04, fontSize: 14),
+                textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            ElevatedButton(onPressed: _loadInitialData, child: const Text('다시 시도')),
+          ],
         ),
       );
     }
 
-    return ListView.builder(
+    if (_filteredAcademies == null || _filteredAcademies!.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(50),
+        child: Column(
+          children: [
+            Icon(Icons.school_outlined, size: 48, color: FindemyColor.gray04),
+            const SizedBox(height: 16),
+            Text(
+              '검색 결과가 없습니다.',
+              style: TextStyle(color: FindemyColor.gray04, fontSize: 14),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
+      padding: const EdgeInsets.symmetric(horizontal: 14),
       itemCount: _filteredAcademies!.length,
+      separatorBuilder: (context, index) => Divider(
+        color: FindemyColor.gray02,
+        height: 1,
+      ),
       itemBuilder: (context, index) {
         final academy = _filteredAcademies![index];
-        return GestureDetector(
+        return _AcademyCard(
+          academy: academy,
           onTap: () {
             Navigator.push(
               context,
@@ -744,73 +801,85 @@ class _AcademyPageState extends State<AcademyPage> {
               ),
             );
           },
-          child: Padding(
-            key: ValueKey(academy.academyId), // Use ValueKey for better performance in lists
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  width: 64,
-                  height: 64,
-                  decoration: BoxDecoration(
-                    color: FindemyColor.gray02, // Placeholder background
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: academy.academyImgUrl != null && academy.academyImgUrl!.isNotEmpty
-                      ? Image.network(
-                    academy.academyImgUrl!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) {
-                      // Fallback to asset image on error
-                      return Center(
-                        child: SvgPicture.asset('assets/image/character.svg', width: 30),
-                      );
-                    },
-                  )
-                      : Center(
-                    // Fallback to asset image if no URL
-                    child: SvgPicture.asset('assets/image/character.svg', width: 30),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        academy.academyName ?? '이름 없음', // Handle null name
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        academy.address ?? '주소 없음', // Handle null address
-                        style: TextStyle(color: FindemyColor.gray04, fontSize: 12),
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        children: academy.subjects?.map((subject) {
-                          return Text(
-                            '#${subject.displayName}', // Use displayName from SubjectEnumExtension
-                            style: TextStyle(
-                              color: FindemyColor.gray04,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              decoration: TextDecoration.underline,
-                              decorationColor: FindemyColor.gray04,
-                            ),
-                          );
-                        }).toList() ?? [], // Handle null subjects list
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
         );
       },
+    );
+  }
+}
+
+// Re-using the _AcademyCard from MainPage, ensure it's also updated to use Academy
+class _AcademyCard extends StatelessWidget {
+  final Academy academy;
+  final VoidCallback? onTap;
+
+  const _AcademyCard({
+    required this.academy,
+    this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        color: Colors.white,
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          children: [
+            Container(
+              width: 80,
+              height: 80,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                color: FindemyColor.gray02,
+              ),
+              child: (academy.academyImgUrl != null && academy.academyImgUrl!.isNotEmpty)
+                  ? Image.network(
+                academy.academyImgUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Center(
+                    child: SvgPicture.asset('assets/image/character.svg', width: 40, height: 40),
+                  );
+                },
+              )
+                  : Center(
+                child: SvgPicture.asset('assets/image/character.svg', width: 40, height: 40),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(academy.academyName,
+                      style:
+                      const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
+                  const SizedBox(height: 2),
+                  Text(academy.address ?? '주소 없음',
+                      style: TextStyle(color: FindemyColor.gray04, fontSize: 12)),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    children: academy.subjects.map((subject) {
+                      return Text(
+                        '#$subject',
+                        style: TextStyle(
+                          color: FindemyColor.gray04,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          decoration: TextDecoration.underline,
+                          decorationColor: FindemyColor.gray04,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

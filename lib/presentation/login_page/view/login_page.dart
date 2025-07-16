@@ -11,6 +11,7 @@ import 'package:findemy_mobile/services/api_services.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/svg.dart';
 import 'package:material_symbols_icons/symbols.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -28,34 +29,45 @@ class _LoginPageState extends State<LoginPage> {
   bool _isLoading = false;
 
   Future<void> _handleLogin() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
     try {
-      final user = UserModel(
-        accountId: _userIdController.text,
-        password: _passwordController.text,
-      );
+      final userId = _userIdController.text.trim();
+      final password = _passwordController.text;
 
-      final LoginModel response = await ApiServices.loginUser(user);
+      final user = UserModel(accountId: userId, password: password);
+      final loginResponse = await ApiServices.loginUser(user);
 
-      print('로그인 성공: Access Token = ${response.accessToken}');
-      print('로그인 성공: Refresh Token = ${response.refreshToken}');
-      Navigator.pushAndRemoveUntil(
-        context,
-        MaterialPageRoute(builder: (context) => const MainApp()),
-            (route) => false,
-      );
+      if (loginResponse.accessToken != null) {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('accessToken', loginResponse.accessToken!);
 
+        // 중요: ApiServices에 토큰 설정
+        ApiServices.setAuthorizationToken(loginResponse.accessToken!);
+
+        Navigator.pushAndRemoveUntil(
+          context,
+          MaterialPageRoute(builder: (context) => const MainApp()),
+              (route) => false,
+        );
+      } else {
+        setState(() {
+          _errorMessage = '아이디 또는 비밀번호가 올바르지 않습니다.';
+        });
+      }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('오류: ${e.toString()}')),
-      );
+      setState(() {
+        _errorMessage = '서버 오류: ${e.toString()}';
+      });
     } finally {
       setState(() {
         _isLoading = false;
-        _errorMessage = null;
       });
     }
   }
-
 
   @override
   void dispose() {
