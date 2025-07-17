@@ -1,4 +1,5 @@
 import 'package:findemy_mobile/core/constants/color.dart';
+import 'package:findemy_mobile/models/bookmark_model.dart';
 import 'package:findemy_mobile/presentation/main_page/view/main_page.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
@@ -9,6 +10,7 @@ import 'package:findemy_mobile/services/api_services.dart';
 import 'package:findemy_mobile/models/academy_detail_model.dart';
 import 'package:findemy_mobile/models/lesson_model.dart';
 import 'package:findemy_mobile/models/subject_enum.dart';
+import 'package:findemy_mobile/models/wishlist_item.dart'; // WishlistItem 모델 import
 
 class AcademyDetailPage extends StatefulWidget {
   final String academyId;
@@ -625,7 +627,15 @@ class _AcademyDetailPageState extends State<AcademyDetailPage> {
           padding: const EdgeInsets.all(12),
           child: CustomElevatedButton(
             text: '찜 하기',
-            onPressed: () {
+            // academy_detail_page.dart의 '찜 하기' 버튼 onPressed 부분만 수정
+            onPressed: () async {
+              if (_lessons == null || _lessons!.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('선택할 수업이 없습니다.')),
+                );
+                return;
+              }
+
               final selectedLessons = _lessons!
                   .asMap()
                   .entries
@@ -639,12 +649,47 @@ class _AcademyDetailPageState extends State<AcademyDetailPage> {
                 );
                 return;
               }
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (context) => MainPage(),
-                ),
-              );
+
+              // 선택된 수업들의 총 금액 계산 (현재 로직에서는 사용되지 않지만, 유지)
+              final totalPrice = selectedLessons.fold<int>(0, (sum, lesson) => sum + (lesson.amount ?? 0));
+
+              try {
+                // 1. 먼저 현재 북마크 상태를 가져옴
+                final currentBookmarks = await ApiServices.mypageData();
+                List<int> currentBookmarkIds = currentBookmarks.favorites.map((f) => f.academyId).toList();
+
+                // 2. 새로운 학원 ID 추가
+                final newAcademyId = academy.academyId!;
+                if (!currentBookmarkIds.contains(newAcademyId)) {
+                  currentBookmarkIds.add(newAcademyId);
+                }
+
+                // 3. 업데이트된 북마크 리스트로 API 호출
+                final updatedBookmarkData = BookMarkModel(academyId: currentBookmarkIds); // Corrected spelling and parameter name
+
+                // ✨ 요청 본문 로그 추가
+                print('--- [찜하기 버튼 클릭 - POST /favorite 요청] ---');
+                print('보내는 북마크 ID 리스트: ${updatedBookmarkData.academyId}'); // Corrected to .academyId
+                print('-------------------------------------------');
+
+                await ApiServices.postBookmarks(updatedBookmarkData, academy.academyId!);
+
+                print('찜하기 성공: 학원 ID ${academy.academyId}');
+
+                // 4. 성공 메시지 표시
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('찜 목록에 추가되었습니다.')),
+                );
+
+                // 5. 이전 화면으로 돌아가기
+                Navigator.pop(context);
+
+              } catch (e) {
+                print('찜하기 실패: $e');
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('찜하기 실패: ${e.toString()}')),
+                );
+              }
             },
           ),
         ),

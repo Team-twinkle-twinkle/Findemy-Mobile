@@ -1,14 +1,21 @@
-import 'dart:async';
+import 'dart:async'; // Timer 사용을 위한 import
+import 'package:flutter/material.dart';
+import 'package:flutter_svg/flutter_svg.dart';
+import 'package:intl/intl.dart';
+import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:shared_preferences/shared_preferences.dart'; // ✨ SharedPreferences 사용을 위한 import
+
 import 'package:findemy_mobile/core/components/header/logo_header.dart';
 import 'package:findemy_mobile/core/constants/color.dart';
 import 'package:findemy_mobile/models/academy_model.dart';
 import 'package:findemy_mobile/models/all_academy_model.dart';
+import 'package:findemy_mobile/models/academy_sesarch_model.dart';
 import 'package:findemy_mobile/models/subject_enum.dart';
 import 'package:findemy_mobile/presentation/academy_page/view/academy_detail_page.dart';
 import 'package:findemy_mobile/services/api_services.dart';
-import 'package:flutter/material.dart';
-import 'package:flutter_svg/flutter_svg.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+// MyPage를 직접 import하지 않습니다. MyPage가 이 위젯의 자식이 아니기 때문입니다.
+// MyPage는 MyPage를 호출하는 곳에서 loggedInUserId를 받아야 합니다.
+
 
 class MainPage extends StatefulWidget {
   const MainPage({super.key});
@@ -33,28 +40,31 @@ class _MainPageState extends State<MainPage> {
     ...SubjectEnum.values.map((e) => e.displayName)
   ];
 
-  // Changed to List<Academy>
   List<Academy> _allAcademies = [];
   List<Academy> _filteredAcademies = [];
 
   bool _isLoadingAcademies = false;
   String? _errorMessage;
 
+  final TextEditingController _searchController = TextEditingController();
+
+  // ✨ 로그인된 사용자 ID를 저장할 변수 및 로딩 상태
+  String? _loggedInUserId;
+  bool _isUserIdLoading = true; // 사용자 ID 로딩 상태
+
   @override
   void initState() {
     super.initState();
     _bannerPageController = PageController(viewportFraction: 1);
-    _loadInitialData();
+    _loadInitialData(); // ✨ 사용자 ID 로딩 로직이 포함됨
     _startBannerAutoSlide();
   }
 
   Future<void> _loadInitialData() async {
-    await _fetchAllAcademies();
-    _applyCategoryFilter();
-  }
-
-  Future<void> _fetchAllAcademies() async {
     if (!mounted) return;
+
+    // ✨ 사용자 ID 불러오기
+    await _loadLoggedInUserId();
 
     setState(() {
       _isLoadingAcademies = true;
@@ -65,7 +75,6 @@ class _MainPageState extends State<MainPage> {
       final AllAcademyModel response = await ApiServices.allAcademies();
       if (mounted) {
         setState(() {
-          // response.academies is already List<Academy>
           _allAcademies = response.academies;
           _isLoadingAcademies = false;
         });
@@ -78,12 +87,67 @@ class _MainPageState extends State<MainPage> {
         });
       }
     }
+    // 초기 로드 시 검색어가 있다면 검색 결과를 반영
+    if (_searchController.text.isNotEmpty) {
+      _performSearch(_searchController.text);
+    } else {
+      _applyCategoryFilter();
+    }
   }
 
+  // ✨ SharedPreferences에서 로그인된 사용자 ID를 불러오는 메서드
+  Future<void> _loadLoggedInUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    final userId = prefs.getString('loggedInUserId');
+    if (mounted) {
+      setState(() {
+        _loggedInUserId = userId;
+        _isUserIdLoading = false; // 사용자 ID 로딩 완료
+        print('불러온 사용자 ID: $_loggedInUserId');
+      });
+    }
+  }
+
+
+  Future<void> _performSearch(String query) async {
+    if (query.trim().isEmpty) {
+      _loadInitialData(); // _fetchAllAcademies()를 호출하여 전체 데이터를 다시 가져오고 _applyCategoryFilter()로 필터링
+      return;
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _isLoadingAcademies = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final List<AcademySearchModel> searchResults = await ApiServices.searchAcademies(query);
+      if (mounted) {
+        setState(() {
+          _filteredAcademies = searchResults.map((e) => e.academy).toList();
+          _isLoadingAcademies = false;
+          // 검색 시 카테고리 필터를 "전체"로 초기화합니다.
+          _selectedCategory = "전체";
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingAcademies = false;
+          _errorMessage = '학원 검색 중 오류 발생: $e';
+          _filteredAcademies = []; // 오류 발생 시 결과 목록을 비웁니다.
+        });
+      }
+    }
+  }
+
+
   void _applyCategoryFilter() {
-    if (_selectedCategory == "전체") {
+    if (_selectedCategory == "전체" && _searchController.text.isEmpty) {
       _filteredAcademies = List.from(_allAcademies);
-    } else {
+    } else if (_searchController.text.isEmpty) { // 검색어가 없을 때만 카테고리 필터 적용
       _filteredAcademies = _allAcademies.where((academy) {
         return academy.subjects.any((subject) {
           String koreanSubject = SubjectEnumExtension.toKorean(subject);
@@ -91,6 +155,7 @@ class _MainPageState extends State<MainPage> {
         });
       }).toList();
     }
+    // 검색어가 있다면 _filteredAcademies는 _performSearch 결과로 유지됩니다.
     setState(() {});
   }
 
@@ -123,24 +188,34 @@ class _MainPageState extends State<MainPage> {
 
     setState(() {
       _selectedCategory = category;
+      _searchController.clear(); // 카테고리 변경 시 검색어 초기화
     });
 
     _applyCategoryFilter();
   }
 
   Future<void> _onRefresh() async {
-    await _loadInitialData();
+    _searchController.clear(); // 새로고침 시 검색어 초기화
+    await _loadInitialData(); // ✨ 사용자 ID 로딩 포함
   }
 
   @override
   void dispose() {
     _bannerPageController.dispose();
     _bannerTimer?.cancel();
+    _searchController.dispose(); // TextEditingController dispose 추가
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
+    // ✨ 사용자 ID를 로드하는 동안 로딩 인디케이터를 보여줄 수 있습니다.
+    if (_isUserIdLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       body: SafeArea(
         child: RefreshIndicator(
@@ -173,6 +248,7 @@ class _MainPageState extends State<MainPage> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 13),
       child: SearchBar(
+        controller: _searchController, // 컨트롤러 할당
         backgroundColor: WidgetStatePropertyAll(FindemyColor.gray01),
         elevation: const WidgetStatePropertyAll(0),
         shape: WidgetStateProperty.all(
@@ -186,10 +262,7 @@ class _MainPageState extends State<MainPage> {
           // 검색 바 탭 시 로직 추가 (예: 검색 페이지로 이동)
         },
         onSubmitted: (query) {
-          // 검색 기능 추가 시 여기에 로직 구현
-          // 현재는 카테고리 필터링만 있으므로 검색어 필터링 로직은 추가되지 않음
-          // 만약 검색 기능을 클라이언트에서 구현하려면 _allAcademies를 기반으로 추가 필터링 필요
-          print('검색어 제출: $query');
+          _performSearch(query); // API 연동 검색 호출
         },
       ),
     );
@@ -380,7 +453,6 @@ class _MainPageState extends State<MainPage> {
 }
 
 class _AcademyCard extends StatelessWidget {
-  // Changed to Academy
   final Academy academy;
   final VoidCallback? onTap;
 
@@ -424,11 +496,11 @@ class _AcademyCard extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(academy.academyName, // academyName is not nullable
+                  Text(academy.academyName,
                       style:
                       const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
                   const SizedBox(height: 2),
-                  Text(academy.address ?? '주소 없음', // Use ?? for nullable address
+                  Text(academy.address ?? '주소 없음',
                       style: TextStyle(color: FindemyColor.gray04, fontSize: 12)),
                   const SizedBox(height: 8),
                   Wrap(

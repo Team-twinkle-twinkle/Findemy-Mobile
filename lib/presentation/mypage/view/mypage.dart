@@ -1,82 +1,90 @@
-import 'package:findemy_mobile/core/components/header/logo_header.dart';
-import 'package:findemy_mobile/presentation/academy_page/view/academy_detail_page.dart';
-import 'package:flutter/material.dart';
 import 'package:findemy_mobile/core/constants/color.dart';
-import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:findemy_mobile/models/subject_enum.dart';
+import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-
-class WishlistItem {
-  final String academyId;
-  final String academyName;
-  final String academyAddress;
-  final List<String> subjects;
-  final int totalPrice;
-  final String academyImageUrl;
-
-  WishlistItem({
-    required this.academyId,
-    required this.academyName,
-    required this.academyAddress,
-    required this.subjects,
-    required this.totalPrice,
-    required this.academyImageUrl,
-  });
-}
+import 'package:findemy_mobile/presentation/academy_page/view/academy_detail_page.dart';
+// import 'package:findemy_mobile/models/wishlist_item.dart'; // This line might be redundant or causing confusion if Favorite is the correct model
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:material_symbols_icons/material_symbols_icons.dart';
+import 'package:findemy_mobile/core/components/header/logo_header.dart';
+import 'package:findemy_mobile/models/mypage_model.dart'; // Make sure MyPageModel and its nested 'Favorite' class are defined here
+import 'package:findemy_mobile/services/api_services.dart';
+import 'package:findemy_mobile/models/bookmark_model.dart'; // Ensure this model is correctly defined
 
 class MyPage extends StatefulWidget {
-  final String userName;
-
-  const MyPage({super.key, this.userName = '권수현'});
+  const MyPage({super.key});
 
   @override
   State<MyPage> createState() => _MyPageState();
 }
 
 class _MyPageState extends State<MyPage> {
-  List<WishlistItem> _wishlistItems = [];
+  MyPageModel? _myPageData;
+  String? _loggedInUserId;
+  bool _isLoading = true;
+  String? _errorMessage;
 
   @override
   void initState() {
     super.initState();
-    _loadWishlistItems();
+    _initializeMyPage();
   }
 
-  void _loadWishlistItems() {
-    // 샘플 데이터
-    _wishlistItems = [
-      WishlistItem(
-        academyId: '1',
-        academyName: '메가스터디 교육',
-        academyAddress: '서울 서초구 서초 1동',
-        subjects: ['수학'],
-        totalPrice: 550000,
-        academyImageUrl: '',
-      ),
-      WishlistItem(
-        academyId: '2',
-        academyName: '파고다어학원',
-        academyAddress: '서울 서초구 서초 4동',
-        subjects: ['영어'],
-        totalPrice: 380000,
-        academyImageUrl: '',
-      ),
-      WishlistItem(
-        academyId: '3',
-        academyName: '우성학원',
-        academyAddress: '서울 서초구 서초 3동',
-        subjects: ['수학', '국어', '영어'],
-        totalPrice: 900000,
-        academyImageUrl: '',
-      ),
-      WishlistItem(
-        academyId: '4',
-        academyName: '필학원',
-        academyAddress: '서울 서초구 서초 1동',
-        subjects: ['국어'],
-        totalPrice: 980000,
-        academyImageUrl: '',
-      ),
-    ];
+  Future<void> _initializeMyPage() async {
+    if (!mounted) return;
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    await _loadLoggedInUserId();
+
+    if (_loggedInUserId != null && _loggedInUserId!.isNotEmpty) {
+      try {
+        final data = await ApiServices.mypageData();
+        if (mounted) {
+          setState(() {
+            _myPageData = data;
+          });
+        }
+      } catch (e) {
+        print('마이페이지 데이터 불러오기 실패: $e');
+        if (mounted) {
+          setState(() {
+            _errorMessage = '마이페이지 데이터를 불러오는데 실패했습니다.';
+            _myPageData = null;
+          });
+        }
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _errorMessage = '로그인이 필요합니다. 사용자 정보를 찾을 수 없습니다.';
+          _myPageData = null;
+        });
+      }
+    }
+
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadLoggedInUserId() async {
+    final prefs = await SharedPreferences.getInstance();
+    _loggedInUserId = prefs.getString('loggedInUserId');
+    print('MyPage에서 불러온 사용자 ID: $_loggedInUserId');
+    String? token = prefs.getString('accessToken');
+    if (token != null && token.isNotEmpty) {
+      ApiServices.setAuthorizationToken(token);
+      print('MyPage: SharedPreferences에서 불러온 Access Token: ${token.substring(0, 10)}...');
+    } else {
+      print('MyPage: SharedPreferences에 저장된 토큰 없음.');
+    }
+    print('MyPage: 현재 Dio 헤더: ${ApiServices.dio.options.headers}');
   }
 
   String _formatCurrency(int amount) {
@@ -85,35 +93,83 @@ class _MyPageState extends State<MyPage> {
   }
 
   int _getTotalAmount() {
-    return _wishlistItems.fold(0, (sum, item) => sum + item.totalPrice);
+    return _myPageData?.totalPrice ?? 0;
   }
 
-  void _removeWishlistItem(int index) {
-    setState(() {
-      _wishlistItems.removeAt(index);
-    });
-  }
+  void _removeWishlistItem(int index) async {
+    if (_myPageData == null || _myPageData!.favorites.isEmpty) return;
 
-  void _navigateToAcademyDetail(String academyId) async {
-    final result = await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => AcademyDetailPage(academyId: academyId),
-      ),
-    );
+    final academyIdToRemove = _myPageData!.favorites[index].academyId;
 
-    if (result != null && result is List<WishlistItem>) {
-      setState(() {
-        for (var newItem in result) {
-          if (!_wishlistItems.any((item) => item.academyId == newItem.academyId && item.subjects.toSet().difference(newItem.subjects.toSet()).isEmpty && newItem.subjects.toSet().difference(item.subjects.toSet()).isEmpty)) {
-            _wishlistItems.add(newItem);
-          }
-        }
-      });
+    try {
+      await ApiServices.deleteFavorite(academyIdToRemove);
+      print('찜 취소 API 호출 성공: 학원 ID $academyIdToRemove');
+      await _initializeMyPage();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('찜한 항목이 삭제되었습니다.')),
+      );
+    } catch (e) {
+      print('찜 취소 실패: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('찜 취소 실패: ${e.toString()}')),
+      );
     }
   }
 
-  Widget _buildWishlistItem(WishlistItem item, int index) {
+  void _navigateToAcademyDetail(String academyIdString) async {
+    // result is the returned value from AcademyDetailPage, if any
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => AcademyDetailPage(academyId: academyIdString),
+      ),
+    );
+
+    // Always refresh data after returning from AcademyDetailPage
+    // as changes (like adding/removing a bookmark) might have occurred.
+    await _initializeMyPage();
+
+    // The 'result' variable from Navigator.push is typically used if AcademyDetailPage
+    // explicitly returns data using Navigator.pop(context, someData).
+    // Your current AcademyDetailPage doesn't explicitly return a 'result.academyId'.
+    // If you intend to pass data back, you'd need to modify AcademyDetailPage.
+    // However, since _initializeMyPage() refreshes all data, the logic below
+    // to check and add new bookmarks might be redundant or incorrectly implemented
+    // if AcademyDetailPage isn't designed to return new academy IDs for bookmarking.
+    // For now, I'm commenting out the potentially problematic logic that
+    // assumes a 'result.academyId' is returned from AcademyDetailPage.
+    // If you explicitly return academyId from detail page to add it to bookmark,
+    // you need to uncomment and adapt the logic here.
+    /*
+    if (result != null && result is AcademyDetailModel) { // Assuming AcademyDetailPage returns AcademyDetailModel
+      final int newAcademyId = result.academyId ?? 0; // Use the actual property from the returned model
+      List<int> currentBookmarkIds = _myPageData?.favorites.map((f) => f.academyId).toList() ?? [];
+
+      if (!currentBookmarkIds.contains(newAcademyId)) {
+        currentBookmarkIds.add(newAcademyId);
+      }
+
+      final updatedBookmarkData = BookMarkModel(academyId: currentBookmarkIds); // Corrected parameter name
+
+      try {
+        await ApiServices.postBookmarks(updatedBookmarkData);
+        print('찜하기 API 호출 성공: 학원 ID ${newAcademyId}');
+        await _initializeMyPage();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('찜 목록에 추가되었습니다.')),
+        );
+      } catch (e) {
+        print('찜하기 API 호출 실패: $e');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('찜하기 실패: ${e.toString()}')),
+        );
+      }
+    }
+    */
+  }
+
+  // Changed `FavoriteAcademyItem` to `Favorite` as defined in MyPageModel
+  Widget _buildWishlistItem(Favorite item, int index) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
       padding: const EdgeInsets.all(16),
@@ -124,7 +180,6 @@ class _MyPageState extends State<MyPage> {
       ),
       child: Row(
         children: [
-          // 학원 로고/이미지
           Container(
             width: 48,
             height: 48,
@@ -144,10 +199,9 @@ class _MyPageState extends State<MyPage> {
             ),
           ),
           const SizedBox(width: 12),
-          // 학원 정보
           Expanded(
             child: GestureDetector(
-              onTap: () => _navigateToAcademyDetail(item.academyId),
+              onTap: () => _navigateToAcademyDetail(item.academyId.toString()),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -161,15 +215,16 @@ class _MyPageState extends State<MyPage> {
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    item.academyAddress,
+                    item.address ?? '주소 정보 없음',
                     style: TextStyle(
                       fontSize: 12,
                       color: FindemyColor.gray05,
                     ),
                   ),
                   const SizedBox(height: 8),
+                  // Assuming subjects is List<String> from Favorite model, and SubjectEnum has a fromString constructor or a way to get displayName
                   Text(
-                    item.subjects.join(', '),
+                    item.subjects.map((s) => SubjectEnumExtension.fromString(s).displayName).join(', '),
                     style: TextStyle(
                       fontSize: 12,
                       color: FindemyColor.black,
@@ -179,7 +234,6 @@ class _MyPageState extends State<MyPage> {
               ),
             ),
           ),
-          // 가격과 삭제 버튼
           Column(
             crossAxisAlignment: CrossAxisAlignment.end,
             children: [
@@ -201,7 +255,7 @@ class _MyPageState extends State<MyPage> {
               ),
               const SizedBox(height: 8),
               Text(
-                _formatCurrency(item.totalPrice),
+                _formatCurrency(item.price),
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
@@ -217,17 +271,58 @@ class _MyPageState extends State<MyPage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_errorMessage != null) {
+      return Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                _errorMessage!,
+                style: const TextStyle(color: Colors.red, fontSize: 16),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _initializeMyPage,
+                child: const Text('다시 시도 / 로그인 페이지로 이동'),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Ensure _myPageData is not null before accessing its properties here
+    if (_myPageData == null) {
+      // This should ideally not be reached if _errorMessage is set for null data,
+      // but as a fallback, show a message.
+      return Scaffold(
+        body: Center(
+          child: Text('마이페이지 데이터를 불러올 수 없습니다.'),
+        ),
+      );
+    }
+
+
     return Scaffold(
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            LogoHeader(),
+            const LogoHeader(),
             const SizedBox(height: 36),
             Padding(
               padding: const EdgeInsets.only(left: 14, bottom: 24),
               child: Text(
-                '${widget.userName}님의 마이페이지',
+                // Use null-aware operator to safely access accountId
+                '${_myPageData?.accountId ?? '사용자'}님의 마이페이지',
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.w600,
@@ -284,7 +379,7 @@ class _MyPageState extends State<MyPage> {
               ),
             ),
             const SizedBox(height: 8),
-            if (_wishlistItems.isEmpty)
+            if (_myPageData!.favorites.isEmpty) // Safe to use ! here as we've checked for null _myPageData above
               Center(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 40),
@@ -312,8 +407,8 @@ class _MyPageState extends State<MyPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Column(
                   children: [
-                    for (int i = 0; i < _wishlistItems.length; i++)
-                      _buildWishlistItem(_wishlistItems[i], i),
+                    for (int i = 0; i < _myPageData!.favorites.length; i++)
+                      _buildWishlistItem(_myPageData!.favorites[i], i),
                   ],
                 ),
               ),

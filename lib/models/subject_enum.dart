@@ -19,25 +19,24 @@ extension SubjectEnumExtension on SubjectEnum {
         return "과학";
       case SubjectEnum.ENGLISH:
         return "영어";
-      default:
-        return "";
     }
   }
 
   static SubjectEnum fromString(String subject) {
-    switch (subject) {
-      case "국어":
+    switch (subject.toUpperCase()) {
+      case "KOREAN":
         return SubjectEnum.KOREAN;
-      case "수학":
+      case "MATH":
         return SubjectEnum.MATH;
-      case "사회":
+      case "SOCIAL":
         return SubjectEnum.SOCIAL;
-      case "과학":
+      case "SCIENCE":
         return SubjectEnum.SCIENCE;
-      case "영어":
+      case "ENGLISH":
         return SubjectEnum.ENGLISH;
       default:
-        throw Exception('Unknown subject: $subject');
+        print('Unknown subject from server: $subject');
+        return SubjectEnum.KOREAN;
     }
   }
 

@@ -1,7 +1,10 @@
+import 'package:findemy_mobile/core/components/button/elevated_button.dart';
 import 'package:findemy_mobile/core/components/header/logo_header.dart';
 import 'package:findemy_mobile/core/constants/color.dart';
 import 'package:findemy_mobile/models/academy_model.dart';
 import 'package:findemy_mobile/models/all_academy_model.dart';
+import 'package:findemy_mobile/models/academy_sesarch_model.dart'; // Add this import for AcademySearchModel
+import 'package:findemy_mobile/models/subject_enum.dart';
 import 'package:findemy_mobile/presentation/academy_page/view/academy_detail_page.dart';
 import 'package:findemy_mobile/services/api_services.dart';
 import 'package:flutter/material.dart';
@@ -22,13 +25,13 @@ class _AcademyPageState extends State<AcademyPage> {
   String? _selectedCity;
   String? _selectedDistrict;
 
-  // Changed to List<Academy>
   List<Academy>? _allAcademies;
   List<Academy>? _filteredAcademies;
   bool _isLoading = true;
   bool _hasError = false;
 
   String _searchQuery = '';
+  final TextEditingController _searchController = TextEditingController(); // Added TextEditingController
 
   final List<String> _grades = [
     '전체', '초등생 1학년', '초등생 2학년', '초등생 3학년', '초등생 4학년', '초등생 5학년', '초등생 6학년',
@@ -74,6 +77,13 @@ class _AcademyPageState extends State<AcademyPage> {
   void initState() {
     super.initState();
     _initializeAuthAndLoadData();
+  }
+
+  // Dispose the TextEditingController when the widget is removed from the tree
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   void _initializeAuthAndLoadData() async {
@@ -144,13 +154,14 @@ class _AcademyPageState extends State<AcademyPage> {
 
     List<Academy> tempAcademies = List.from(_allAcademies!);
 
-    if (_searchQuery.isNotEmpty) {
-      tempAcademies = tempAcademies.where((academy) =>
-      (academy.academyName.contains(_searchQuery)) || // academyName is not nullable
-          (academy.address?.contains(_searchQuery) == true) ||
-          (academy.subjects.any((subject) => subject.contains(_searchQuery))) // subjects is List<String>
-      ).toList();
-    }
+    // Removed client-side search filtering here, as it will be handled by API call
+    // if (_searchQuery.isNotEmpty) {
+    //   tempAcademies = tempAcademies.where((academy) =>
+    //   (academy.academyName.contains(_searchQuery)) ||
+    //       (academy.address?.contains(_searchQuery) == true) ||
+    //       (academy.subjects.any((subject) => subject.contains(_searchQuery)))
+    //   ).toList();
+    // }
 
     if (_selectedCity != null && _selectedCity != '전체') {
       tempAcademies = tempAcademies.where((academy) =>
@@ -164,11 +175,19 @@ class _AcademyPageState extends State<AcademyPage> {
     final List<String> selectedSubjects = _getFilterValues('과목');
     if (selectedSubjects.isNotEmpty) {
       tempAcademies = tempAcademies.where((academy) {
-        // academy.subjects is List<String>, directly check against it
         return selectedSubjects.any((selectedSubjectName) =>
             academy.subjects.any((subject) => subject == selectedSubjectName));
       }).toList();
     }
+
+    // Add filtering for grades and frequencies if your Academy model supports them
+    // For example:
+    // final List<String> selectedGrades = _getFilterValues('나이');
+    // if (selectedGrades.isNotEmpty && !selectedGrades.contains('전체')) {
+    //   tempAcademies = tempAcademies.where((academy) =>
+    //       selectedGrades.any((grade) => academy.grades.contains(grade)) // Assuming academy.grades exists
+    //   ).toList();
+    // }
 
     setState(() {
       _filteredAcademies = tempAcademies;
@@ -269,6 +288,7 @@ class _AcademyPageState extends State<AcademyPage> {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 13),
       child: SearchBar(
+        controller: _searchController, // Assign the controller
         backgroundColor: WidgetStatePropertyAll(FindemyColor.gray01),
         elevation: const WidgetStatePropertyAll(0),
         shape: WidgetStateProperty.all(
@@ -283,11 +303,40 @@ class _AcademyPageState extends State<AcademyPage> {
           //   _selectedFilterType = '전체'; // Or a relevant filter type for search
           // });
         },
-        onSubmitted: (query) {
+        onSubmitted: (query) async { // Made async to await API call
           setState(() {
-            _searchQuery = query;
-            _applyFilters();
+            _searchQuery = query; // Update the search query state
+            _isLoading = true; // Show loading indicator
+            _hasError = false; // Clear previous errors
+            _selectedFilterType = '전체'; // Reset filter type when searching
+            _selectedCity = null; // Clear city selection
+            _selectedDistrict = null; // Clear district selection
+            _selectedChips.forEach((key, value) { // Clear chip selections
+              value.clear();
+              value.add('${key}_전체');
+            });
           });
+
+          try {
+            // Call the API service for search
+            final List<AcademySearchModel> searchResults = await ApiServices.searchAcademies(query);
+            if (mounted) {
+              setState(() {
+                // Map AcademySearchModel to Academy objects
+                _filteredAcademies = searchResults.map((e) => e.academy).toList();
+                _isLoading = false; // Hide loading indicator
+              });
+            }
+          } catch (e) {
+            if (mounted) {
+              setState(() {
+                _isLoading = false; // Hide loading indicator
+                _hasError = true; // Set error state
+                _filteredAcademies = []; // Clear results on error
+                print('학원 검색 중 오류 발생: $e');
+              });
+            }
+          }
         },
       ),
     );
@@ -326,6 +375,7 @@ class _AcademyPageState extends State<AcademyPage> {
                           value.add('${key}_전체');
                         });
                         _searchQuery = '';
+                        _searchController.clear();
                         _applyFilters();
                       }
                     });
@@ -358,7 +408,8 @@ class _AcademyPageState extends State<AcademyPage> {
                           value.clear();
                           value.add('${key}_전체');
                         });
-                        _searchQuery = '';
+                        _searchQuery = ''; // Clear search query when selecting "전체" filter
+                        _searchController.clear(); // Clear search bar text
                         _applyFilters();
                       }
                     });
@@ -399,134 +450,147 @@ class _AcademyPageState extends State<AcademyPage> {
 
   Widget _buildFilterOverlay() {
     return Positioned.fill(
+      top: 0, // 상태바 영역까지 포함하여 전체 화면 덮기
       child: Container(
-        color: Colors.black.withOpacity(0.5), // 배경 불투명도 50%
-        child: Align(
-          alignment: Alignment.bottomCenter,
-          child: FractionallySizedBox( // 화면 높이의 70% 차지
-            heightFactor: 0.7,
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              decoration: const BoxDecoration(
-                color: FindemyColor.white,
-                borderRadius: BorderRadius.only(
-                  topLeft: Radius.circular(16),
-                  topRight: Radius.circular(16),
+        color: Colors.black.withValues(alpha: 0.5), // 전체 화면 반투명 배경
+        child: Column(
+          children: [
+            // 상단 빈 공간 (터치 시 오버레이 닫기)
+            Expanded(
+              flex: 3, // 30% 공간
+              child: GestureDetector(
+                onTap: () {
+                  setState(() {
+                    _isFilterVisible = false;
+                    _selectedFilterType = '전체';
+                  });
+                },
+                child: Container(
+                  color: Colors.transparent,
                 ),
               ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        '필터',
-                        style: TextStyle(
-                          color: FindemyColor.black,
-                          fontSize: 20,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _isFilterVisible = false;
-                          });
-                        },
-                        child: Icon(Symbols.close, color: FindemyColor.gray05),
-                      ),
-                    ],
+            ),
+            // 하단 필터 모달
+            Expanded(
+              flex: 7, // 70% 공간
+              child: Container(
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  color: FindemyColor.white,
+                  borderRadius: BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
                   ),
-                  const SizedBox(height: 24),
-                  // 필터링 옵션들을 스크롤 가능하게 만들기
-                  Expanded(
-                    child: SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // 헤더 부분
+                    Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          _buildCityDistrictFilter(),
-                          const SizedBox(height: 24),
-                          Divider(color: FindemyColor.gray02),
-                          const SizedBox(height: 24),
-
-                          _buildGradeFilter(),
-                          const SizedBox(height: 24),
-                          Divider(color: FindemyColor.gray02),
-                          const SizedBox(height: 24),
-
-                          _buildFrequencyFilter(),
-                          const SizedBox(height: 24),
-                          Divider(color: FindemyColor.gray02),
-                          const SizedBox(height: 24),
-
-                          _buildSubjectFilter(),
-                          const SizedBox(height: 32),
+                          Text(
+                            '필터',
+                            style: TextStyle(
+                              color: FindemyColor.black,
+                              fontSize: 20,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                _isFilterVisible = false;
+                                _selectedFilterType = '전체';
+                              });
+                            },
+                            child: Icon(Symbols.close, color: FindemyColor.gray05),
+                          ),
                         ],
                       ),
                     ),
-                  ),
-                  // 하단 버튼들
-                  Row(
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _selectedCity = null;
-                              _selectedDistrict = null;
-                              _selectedChips.forEach((key, value) {
-                                value.clear();
-                                value.add('${key}_전체');
-                              });
-                              _searchQuery = ''; // 검색어 초기화
-                              _applyFilters(); // 필터 초기화 후 다시 필터 적용
-                            });
-                          },
-                          child: Text(
-                            '맞춤 필터링 검색 초기화',
-                            style: TextStyle(
-                              color: FindemyColor.gray05,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                              decoration: TextDecoration.underline,
-                              decorationColor: FindemyColor.gray05,
-                            ),
-                          ),
+                    // 스크롤 가능한 필터 내용
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildCityDistrictFilter(),
+                            const SizedBox(height: 24),
+                            Divider(color: FindemyColor.gray02),
+                            const SizedBox(height: 24),
+                            _buildGradeFilter(),
+                            const SizedBox(height: 24),
+                            Divider(color: FindemyColor.gray02),
+                            const SizedBox(height: 24),
+                            _buildFrequencyFilter(),
+                            const SizedBox(height: 24),
+                            Divider(color: FindemyColor.gray02),
+                            const SizedBox(height: 24),
+                            _buildSubjectFilter(),
+                            const SizedBox(height: 100), // 하단 버튼 공간 확보
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 16),
-                      Expanded(
-                        child: ElevatedButton(
-                          onPressed: () {
-                            setState(() {
-                              _isFilterVisible = false;
-                              _applyFilters(); // 필터 적용
-                            });
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: FindemyColor.green500,
-                            foregroundColor: FindemyColor.white,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(5),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          child: const Text(
-                            '적용 및 검색하기',
-                            style: TextStyle(
-                              fontSize: 15,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 20),
+                      decoration: BoxDecoration(
+                        color: FindemyColor.white,
                       ),
-                    ],
-                  ),
-                ],
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () {
+                                setState(() {
+                                  _selectedCity = null;
+                                  _selectedDistrict = null;
+                                  _selectedChips.forEach((key, value) {
+                                    value.clear();
+                                    value.add('${key}_전체');
+                                  });
+                                  _searchQuery = ''; // 검색어 초기화
+                                  _searchController.clear(); // Clear search bar text
+                                  _applyFilters(); // 필터 초기화 후 다시 필터 적용
+                                });
+                              },
+                              child: Text(
+                                '맞춤 필터링 검색 초기화',
+                                style: TextStyle(
+                                  color: FindemyColor.gray05,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  decoration: TextDecoration.underline,
+                                  decorationColor: FindemyColor.gray05,
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: CustomElevatedButton(
+                              text: '적용 및 검색하기',
+                              onPressed: () {
+                                setState(() {
+                                  _isFilterVisible = false;
+                                  _searchQuery = _searchController.text; // Ensure _searchQuery is updated from the bar
+                                  _applyFilters(); // 필터 적용
+                                });
+                              },
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -571,7 +635,7 @@ class _AcademyPageState extends State<AcademyPage> {
               onChanged: (String? newValue) {
                 setState(() {
                   _selectedCity = newValue;
-                  _selectedDistrict = null; // 시/도가 변경되면 시/군/구 초기화
+                  _selectedDistrict = null;
                 });
               },
             ),
@@ -807,7 +871,6 @@ class _AcademyPageState extends State<AcademyPage> {
   }
 }
 
-// Re-using the _AcademyCard from MainPage, ensure it's also updated to use Academy
 class _AcademyCard extends StatelessWidget {
   final Academy academy;
   final VoidCallback? onTap;
@@ -862,8 +925,9 @@ class _AcademyCard extends StatelessWidget {
                   Wrap(
                     spacing: 8,
                     children: academy.subjects.map((subject) {
+                      final String koreanSubject = SubjectEnumExtension.toKorean(subject);
                       return Text(
-                        '#$subject',
+                        '#$koreanSubject',
                         style: TextStyle(
                           color: FindemyColor.gray04,
                           fontSize: 12,

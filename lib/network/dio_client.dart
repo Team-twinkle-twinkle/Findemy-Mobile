@@ -20,10 +20,14 @@ class DioClient {
       ),
     );
 
-    // Optional: 요청/응답 로그 출력 기능 (디버깅 시 유용)
+    // ✨ LogInterceptor의 모든 로깅 옵션을 true로 설정 (최대 로깅) ✨
     dio.interceptors.add(LogInterceptor(
-      requestBody: true,
-      responseBody: true,
+      request: true,        // 요청 정보 로깅 (메서드, URI 등)
+      requestHeader: true,  // 요청 헤더 로깅 (Authorization 등)
+      requestBody: true,    // 요청 본문 로깅
+      responseHeader: true, // 응답 헤더 로깅
+      responseBody: true,   // 응답 본문 로깅
+      error: true,          // 에러 정보 로깅
     ));
   }
 
