@@ -3,13 +3,11 @@ import 'package:findemy_mobile/models/subject_enum.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:findemy_mobile/presentation/academy_page/view/academy_detail_page.dart';
-// import 'package:findemy_mobile/models/wishlist_item.dart'; // This line might be redundant or causing confusion if Favorite is the correct model
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:material_symbols_icons/material_symbols_icons.dart';
 import 'package:findemy_mobile/core/components/header/logo_header.dart';
-import 'package:findemy_mobile/models/mypage_model.dart'; // Make sure MyPageModel and its nested 'Favorite' class are defined here
+import 'package:findemy_mobile/models/mypage_model.dart';
 import 'package:findemy_mobile/services/api_services.dart';
-import 'package:findemy_mobile/models/bookmark_model.dart'; // Ensure this model is correctly defined
 
 class MyPage extends StatefulWidget {
   const MyPage({super.key});
@@ -117,58 +115,15 @@ class _MyPageState extends State<MyPage> {
   }
 
   void _navigateToAcademyDetail(String academyIdString) async {
-    // result is the returned value from AcademyDetailPage, if any
     await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (context) => AcademyDetailPage(academyId: academyIdString),
       ),
     );
-
-    // Always refresh data after returning from AcademyDetailPage
-    // as changes (like adding/removing a bookmark) might have occurred.
     await _initializeMyPage();
-
-    // The 'result' variable from Navigator.push is typically used if AcademyDetailPage
-    // explicitly returns data using Navigator.pop(context, someData).
-    // Your current AcademyDetailPage doesn't explicitly return a 'result.academyId'.
-    // If you intend to pass data back, you'd need to modify AcademyDetailPage.
-    // However, since _initializeMyPage() refreshes all data, the logic below
-    // to check and add new bookmarks might be redundant or incorrectly implemented
-    // if AcademyDetailPage isn't designed to return new academy IDs for bookmarking.
-    // For now, I'm commenting out the potentially problematic logic that
-    // assumes a 'result.academyId' is returned from AcademyDetailPage.
-    // If you explicitly return academyId from detail page to add it to bookmark,
-    // you need to uncomment and adapt the logic here.
-    /*
-    if (result != null && result is AcademyDetailModel) { // Assuming AcademyDetailPage returns AcademyDetailModel
-      final int newAcademyId = result.academyId ?? 0; // Use the actual property from the returned model
-      List<int> currentBookmarkIds = _myPageData?.favorites.map((f) => f.academyId).toList() ?? [];
-
-      if (!currentBookmarkIds.contains(newAcademyId)) {
-        currentBookmarkIds.add(newAcademyId);
-      }
-
-      final updatedBookmarkData = BookMarkModel(academyId: currentBookmarkIds); // Corrected parameter name
-
-      try {
-        await ApiServices.postBookmarks(updatedBookmarkData);
-        print('찜하기 API 호출 성공: 학원 ID ${newAcademyId}');
-        await _initializeMyPage();
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('찜 목록에 추가되었습니다.')),
-        );
-      } catch (e) {
-        print('찜하기 API 호출 실패: $e');
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('찜하기 실패: ${e.toString()}')),
-        );
-      }
-    }
-    */
   }
 
-  // Changed `FavoriteAcademyItem` to `Favorite` as defined in MyPageModel
   Widget _buildWishlistItem(Favorite item, int index) {
     return Container(
       margin: const EdgeInsets.only(bottom: 16),
@@ -222,7 +177,6 @@ class _MyPageState extends State<MyPage> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  // Assuming subjects is List<String> from Favorite model, and SubjectEnum has a fromString constructor or a way to get displayName
                   Text(
                     item.subjects.map((s) => SubjectEnumExtension.fromString(s).displayName).join(', '),
                     style: TextStyle(
@@ -299,10 +253,7 @@ class _MyPageState extends State<MyPage> {
       );
     }
 
-    // Ensure _myPageData is not null before accessing its properties here
     if (_myPageData == null) {
-      // This should ideally not be reached if _errorMessage is set for null data,
-      // but as a fallback, show a message.
       return Scaffold(
         body: Center(
           child: Text('마이페이지 데이터를 불러올 수 없습니다.'),
@@ -379,7 +330,7 @@ class _MyPageState extends State<MyPage> {
               ),
             ),
             const SizedBox(height: 8),
-            if (_myPageData!.favorites.isEmpty) // Safe to use ! here as we've checked for null _myPageData above
+            if (_myPageData!.favorites.isEmpty)
               Center(
                 child: Padding(
                   padding: const EdgeInsets.symmetric(vertical: 40),

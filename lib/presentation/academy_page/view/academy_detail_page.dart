@@ -655,24 +655,24 @@ class _AcademyDetailPageState extends State<AcademyDetailPage> {
 
               try {
                 // 1. 먼저 현재 북마크 상태를 가져옴
-                final currentBookmarks = await ApiServices.mypageData();
-                List<int> currentBookmarkIds = currentBookmarks.favorites.map((f) => f.academyId).toList();
+                // final currentBookmarks = await ApiServices.mypageData();
+                // List<int> currentBookmarkIds = currentBookmarks.favorites.map((f) => f.academyId).toList();
+                //
+                // // 2. 새로운 학원 ID 추가
+                // final newAcademyId = academy.academyId!;
+                // if (!currentBookmarkIds.contains(newAcademyId)) {
+                //   currentBookmarkIds.add(newAcademyId);
+                // }
 
-                // 2. 새로운 학원 ID 추가
-                final newAcademyId = academy.academyId!;
-                if (!currentBookmarkIds.contains(newAcademyId)) {
-                  currentBookmarkIds.add(newAcademyId);
-                }
+                // // 3. 업데이트된 북마크 리스트로 API 호출
+                // final updatedBookmarkData = BookMarkModel(academyId: currentBookmarkIds); // Corrected spelling and parameter name
+                //
+                // // ✨ 요청 본문 로그 추가
+                // print('--- [찜하기 버튼 클릭 - POST /favorite 요청] ---');
+                // print('보내는 북마크 ID 리스트: ${updatedBookmarkData.academyId}'); // Corrected to .academyId
+                // print('-------------------------------------------');
 
-                // 3. 업데이트된 북마크 리스트로 API 호출
-                final updatedBookmarkData = BookMarkModel(academyId: currentBookmarkIds); // Corrected spelling and parameter name
-
-                // ✨ 요청 본문 로그 추가
-                print('--- [찜하기 버튼 클릭 - POST /favorite 요청] ---');
-                print('보내는 북마크 ID 리스트: ${updatedBookmarkData.academyId}'); // Corrected to .academyId
-                print('-------------------------------------------');
-
-                await ApiServices.postBookmarks(updatedBookmarkData, academy.academyId!);
+                await ApiServices.postBookmarks(BookMarkModel(academyId: [0, 1]), academy.academyId!);
 
                 print('찜하기 성공: 학원 ID ${academy.academyId}');
 

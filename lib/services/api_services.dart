@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:dio/dio.dart';
 import 'package:findemy_mobile/models/academy_detail_model.dart';
 import 'package:findemy_mobile/models/academy_sesarch_model.dart';
@@ -164,12 +166,12 @@ class ApiServices {
       // ✨ 찜하기 요청 직전 로그 종료
 
       final response = await dio.post(
-        '/favorite',
-        data: bookmarkData.toJson(), // List<int>를 직접 data로 보냄
+          '/favorite',
+          data: jsonEncode([1]), // List<int>를 직접 data로 보냄
           queryParameters: {'academyId' : academyId},
-        options: Options(
-          headers: {'Authorization' : 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJxd2VyYXNkZnp4IiwidHlwZSI6ImFjY2VzcyIsInVzZXIiOiJ2Ym5tdmZnaGpramhnIiwiaWF0IjoxNzUyNzExMzk2LCJleHAiOjE3NTI5ODIzOTZ9.K_1C5FoRgBJ5kjef9lZSKtxPLbr73XXwAUAG8Q3ije0'}
-        )
+          options: Options(
+              headers: {'Authorization' : 'Bearer eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJxd2VyYXNkZnp4IiwidHlwZSI6ImFjY2VzcyIsInVzZXIiOiJ2Ym5tdmZnaGpramhnIiwiaWF0IjoxNzUyNzEzMDIxLCJleHAiOjE3NTI5ODQwMjF9.KFUvFei9eA_ZoCTthLGHj7hTgxQkyMmgAwqDFRmzgyk'}
+          )
       );
       // ... (기존 응답 처리 및 오류 처리 로직)
     }catch (err) {
@@ -220,9 +222,7 @@ class ApiServices {
     try {
       final response = await dio.delete(
         '/favorite',
-        queryParameters: {
-          'academy_id': academyId,
-        },
+        queryParameters: {'academyId' : academyId},
       );
       if (response.statusCode != 200 && response.statusCode != 204) { // 200 OK or 204 No Content for successful delete
         throw Exception('찜 취소 실패: ${response.statusCode}');
